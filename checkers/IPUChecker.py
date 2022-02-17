@@ -6,7 +6,7 @@ class IPUChecker(Checker):
     help = ""
 
     def check(self, f: str) -> {str}:
-        used_before_assignment(f)
+        self.used_before_assignment(f)
 
-    def used_before_assignment():
+    def used_before_assignment(f: str):
         return None
