@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="https://cdn.jsdelivr.net/pyodide/v0.18.0/full/pyodide.js"></script>
+    </head>
+    <body>
+        <textarea id='code' style='width: 70%;' rows='6'></textarea>
+        <button id='run' onclick='run()' style="width: 8%;">Run</button>
+        <button id='compile' onclick='compile()' style="width: 8%;">Compile</button>
+        <button id='ast' onclick='ast()' style="width: 8%;">AST</button>
+        <textarea id='output' style='width: 70%;' rows='6' disabled></textarea>
+        <textarea id='terminal' style='width: 70%;' rows='6' disabled value=''></textarea>
+        <script src="index.js"></script>
+    </body>
+</html>
