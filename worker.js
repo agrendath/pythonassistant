@@ -24,7 +24,6 @@ async function init(){
     await micropip.install('isort')
     await micropip.install('toml')
 
-    # await micropip.install('translate')
     import pylint
     print('done')
     `);

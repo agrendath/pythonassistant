@@ -1,29 +1,34 @@
-import re
-
-
 def filter_error_messages(pylint_output: str) -> str:
 
     out = ""
-    pattern = r".*: (\w+): (.*)"
+    pattern = r".*:(\d*):(\d*): (\w+): (.*)"
 
-    for line in pylint_output:
-        if line[0] == "*":
+    for line in pylint_output.split('\n'):
+
+        if not line:
+            continue
+        elif line[0] == "*":
             continue
         elif line[0] == "-":
             break
 
         match = re.search(pattern, line)
-        error_code = match.group(1)
+        if match:
+            error_code = match.group(3)
 
-        if error_code[0] == "E":  # we are currently only interested in E error messages
-            out += line
+            if error_code[0] == "E":  # we are currently only interested in E error messages
+                out += f"""
+[EN] Line {match.group(1)}: [{error_code}] {match.group(4)}
+
+[NL] Lijn {match.group(1)}: [{error_code}] {translate(error_code, match.group(4))}
+"""
 
     return out
 
 
-def translate(error_code: str, msg: str) -> str:
+def translate(error_code: str, m: str) -> str:
 
-    msg = msg.upper()
+    msg = m.upper()
 
     if error_code == "E0001":
         if "Perhaps you forgot a comma?".upper() in msg:
@@ -55,4 +60,43 @@ def translate(error_code: str, msg: str) -> str:
         elif "leading zeros in decimal integer".upper() in msg:
             return "Syntax fout: getallen kunnen niet beginnen met nullen."
         else:
-            return msg
+            return m
+
+    elif error_code == "E0602":  # undefined variable
+        p = r"Undefined variable '(.*)' .*"
+        match = re.search(p, m)
+
+        if match:
+            return f"Ongedefinieerde variabele {match.group(1)}. Zorg dat je deze variabele eerst een waarde toekent vooraleer je ze gebruikt."
+        else:
+            return m
+
+    elif error_code == "E0401":  # import error
+        p = r"Unable to import '(.*)' .*"
+        match = re.search(p, m)
+
+        if match:
+            return f"Ongeldige import; '{match.group(1)}' kon niet worden geïmporteerd, kijk na of je de naam juist hebt gespeld."
+        else:
+            return m
+
+    elif error_code == "E1120":  # no value for parameter
+        p = r"No value for argument '(.*)' .*"
+        match = re.search(p, m)
+
+        if match:
+            return f"Geen waarde toegekend aan argument '{match.group(1)}' bij methode-oproep."
+        else:
+            return m
+
+    elif error_code == "E0601":  # using variable before assignment
+        p = r"Using variable '(.*)' .*"
+        match = re.search(p, m)
+
+        if match:
+            return f"Variabele wordt gebruikt voor er een waarde aan toegekend wordt; zorg dat je eerst een waarde toekent aan de variabele vooraleer je deze gebruikt."
+        else:
+            return m
+
+    elif error_code == "E1121":  # too many function arguments
+        return "Je gebruikt te veel argumenten voor deze methode, kijk na of je de juiste methode gebruikt."
