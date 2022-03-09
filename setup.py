@@ -1,8 +1,10 @@
+import math
 import sys
 import io
 import traceback
 import ast
 import js
+from io import StringIO
 from pylint import lint
 from pylint.reporters.text import TextReporter
 # from webloop import WebLoop
@@ -21,27 +23,27 @@ class WritableObject(object):
     "dummy output stream for pylint"
 
     def __init__(self):
-        self.content = []
+        self.content = ""
 
     def write(self, st):
         "dummy write"
-        self.content.append(st)
+        self.content += st
 
     def read(self):
         "dummy read"
         return self.content
 
 
-def test_code(code):
-    with open("test.py", "w") as f:
+def test_code(code, n):
+    fn = f"test_{n}.py"
+
+    with open(fn, "w") as f:
         f.write(code)
 
     pylint_output = WritableObject()
-    lint.Run(["test.py"], reporter=TextReporter(pylint_output), exit=False)
+    lint.Run([fn], reporter=TextReporter(pylint_output), exit=False)
 
-    result = ""
-    for l in pylint_output.read():
-        result += l
+    result = pylint_output.read()
 
     print(result)
 
@@ -147,9 +149,9 @@ def filter_error_messages(pylint_output: str) -> str:
 
             if error_code[0] == "E":  # we are currently only interested in E error messages
                 out += f"""
-[EN] Line {match.group(1)}: [{error_code}] {match.group(4)}
+[EN] Line {match.group(1)}, column {match.group(2)}: [{error_code}] {match.group(4)}
 
-[NL] Lijn {match.group(1)}: [{error_code}] {translate(error_code, match.group(4))}
+[NL] Lijn {match.group(1)}, kolom {match.group(2)}: [{error_code}] {translate(error_code, match.group(4))}
 """
 
     return out
@@ -196,7 +198,7 @@ def translate(error_code: str, m: str) -> str:
         match = re.search(p, m)
 
         if match:
-            return f"Ongedefinieerde variabele {match.group(1)}. Zorg dat je deze variabele eerst een waarde toekent vooraleer je ze gebruikt."
+            return f"Ongedefinieerde variabele '{match.group(1)}'. Zorg dat je deze variabele eerst een waarde toekent vooraleer je ze gebruikt."
         else:
             return m
 
@@ -223,9 +225,12 @@ def translate(error_code: str, m: str) -> str:
         match = re.search(p, m)
 
         if match:
-            return f"Variabele wordt gebruikt voor er een waarde aan toegekend wordt; zorg dat je eerst een waarde toekent aan de variabele vooraleer je deze gebruikt."
+            return f"Variabele '{match.group(1)}' wordt gebruikt voor er een waarde aan toegekend wordt; zorg dat je eerst een waarde toekent aan de variabele vooraleer je deze gebruikt."
         else:
             return m
 
     elif error_code == "E1121":  # too many function arguments
         return "Je gebruikt te veel argumenten voor deze methode, kijk na of je de juiste methode gebruikt."
+
+    else:
+        return m

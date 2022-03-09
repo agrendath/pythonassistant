@@ -23,8 +23,6 @@ async function init(){
     await micropip.install('platformdirs')
     await micropip.install('isort')
     await micropip.install('toml')
-
-    import pylint
     print('done')
     `);
 
@@ -44,9 +42,13 @@ async function init(){
     self.postMessage({})
 }
 
+let ctr = 0;
+
 function run(code) {
     pyodide.globals.set('code_to_run', code)
-    let output = pyodide.runPython('test_code(code_to_run)')
+    pyodide.globals.set('n', ctr)
+    let output = pyodide.runPython('test_code(code_to_run, n)')
+    ctr++;
     self.postMessage({ result: output })
 }
 

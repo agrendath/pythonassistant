@@ -1,3 +1,6 @@
+import re
+
+
 def filter_error_messages(pylint_output: str) -> str:
 
     out = ""
