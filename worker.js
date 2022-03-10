@@ -42,13 +42,9 @@ async function init(){
     self.postMessage({})
 }
 
-let ctr = 0;
-
 function run(code) {
     pyodide.globals.set('code_to_run', code)
-    pyodide.globals.set('n', ctr)
-    let output = pyodide.runPython('test_code(code_to_run, n)')
-    ctr++;
+    let output = pyodide.runPython('test_code(code_to_run)')
     self.postMessage({ result: output })
 }
 

@@ -34,8 +34,8 @@ class WritableObject(object):
         return self.content
 
 
-def test_code(code, n):
-    fn = f"test_{n}.py"
+def test_code(code):
+    fn = "test.py"
 
     with open(fn, "w") as f:
         f.write(code)
@@ -64,6 +64,8 @@ PYTHON OUTPUT:
 PYLINT OUTPUT:
     {pylint_out}
 """
+
+    lint.pylinter.MANAGER.astroid_cache = {}
 
     return out
 
