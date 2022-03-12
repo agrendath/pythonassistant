@@ -44,7 +44,7 @@ async function init(){
 
 function run(code) {
     pyodide.globals.set('code_to_run', code)
-    let output = pyodide.runPython('test_code(code_to_run)')
+    let output = pyodide.runPython('test_and_run(code_to_run)')
     self.postMessage({ result: output })
 }
 

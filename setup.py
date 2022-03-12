@@ -1,4 +1,6 @@
+from distutils.log import debug
 import math
+from pickle import TRUE
 import sys
 import io
 import traceback
@@ -18,6 +20,8 @@ pyconsole = PyodideConsole(globals=__main__.__dict__, filename="<console>")
 
 namespace = {}  # use separate namespace to hide run_code, modules, etc.
 
+DEBUG = True  # set to True to get verbose output in the browser console
+
 
 class WritableObject(object):
     "dummy output stream for pylint"
@@ -34,23 +38,25 @@ class WritableObject(object):
         return self.content
 
 
-def test_code(code):
-    fn = "test.py"
-
-    with open(fn, "w") as f:
-        f.write(code)
-
-    pylint_output = WritableObject()
-    lint.Run([fn], reporter=TextReporter(pylint_output), exit=False)
-
-    result = pylint_output.read()
-
-    print(result)
-
+def test_and_run(code: str) -> str:
+    pylint_broke = False  # flag that tracks whether pylint broke or not
     run_out = run_code(code)
-    pylint_out = filter_error_messages(result)
 
-    if run_out.startswith("Traceback"):  # code was faulty and could not be run
+    try:
+        pylint_out = test_code(code)
+    except:  # defaults to python output if pylint throws an exception
+        pylint_broke = True
+        pylint_out = """
+[EN] Something went wrong with PyLint, please re-run your code.
+
+[NL] Er is iets fout gelopen met PyLint, probeer opnieuw.
+"""
+    # prints python output in console, useful for debugging
+    # if DEBUG:
+    #     print("PYTHON OUTPUT:", run_out)
+
+    # code was faulty and could not be run, replacing standard python error messages with pylint error messages
+    if run_out.startswith("Traceback") and not pylint_broke:
         run_out = """
 [EN] Something went wrong that prevented your code from executing, you probably have an error somewhere in your code. Check PyLint output below for feedback.
 
@@ -65,9 +71,28 @@ PYLINT OUTPUT:
     {pylint_out}
 """
 
+    return out
+
+
+def test_code(code):
+    fn = "test.py"
+
+    with open(fn, "w") as f:
+        f.write(code)
+
+    pylint_output = WritableObject()
+    lint.Run([fn], reporter=TextReporter(pylint_output), exit=False)
+
+    result = pylint_output.read()
+
+    if DEBUG:
+        print(result)  # prints full pylint output without filtering
+
+    pylint_out = filter_error_messages(result)
+
     lint.pylinter.MANAGER.astroid_cache = {}
 
-    return out
+    return pylint_out
 
 
 def run_code(code):
@@ -132,9 +157,10 @@ def get_unparse(node):
 
 
 def filter_error_messages(pylint_output: str) -> str:
-
     out = ""
+    # pattern that matches with pylint error messages, captures: (1) line, (2) column, (3) error code, and (4) message
     pattern = r".*:(\d*):(\d*): (\w+): (.*)"
+    counter = 1
 
     for line in pylint_output.split('\n'):
 
@@ -151,10 +177,11 @@ def filter_error_messages(pylint_output: str) -> str:
 
             if error_code[0] == "E":  # we are currently only interested in E error messages
                 out += f"""
-[EN] Line {match.group(1)}, column {match.group(2)}: [{error_code}] {match.group(4)}
+{counter}. [EN] Line {match.group(1)}, column {match.group(2)}: [{error_code}] {match.group(4)}
 
-[NL] Lijn {match.group(1)}, kolom {match.group(2)}: [{error_code}] {translate(error_code, match.group(4))}
+{counter}. [NL] Lijn {match.group(1)}, kolom {match.group(2)}: [{error_code}] {translate(error_code, match.group(4))}
 """
+                counter += 1
 
     return out
 
