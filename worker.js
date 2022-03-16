@@ -16,6 +16,13 @@ async function init(){
     await pyodide.loadPackage("micropip");
     await pyodide.loadPackage("lazy-object-proxy");
     await pyodide.loadPackage("wrapt");
+    // await pyodide.loadPackage("astroid");
+    // await pyodide.loadPackage("platformdirs");
+    // await pyodide.loadPackage("isort");
+    // await pyodide.loadPackage("toml");
+    // await pyodide.loadPackage("typing_extensions");
+    // await pyodide.loadPackage("pylint");
+    // console.log("done")
     await pyodide.runPythonAsync(`
     import micropip
     await micropip.install('pylint')
