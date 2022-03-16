@@ -67,7 +67,7 @@ declare class PyProxyClass {
      * @param options
      * @return The JavaScript object resulting from the conversion.
      */
-    toJs({ depth, pyproxies, create_pyproxies, dict_converter }?: {
+    toJs({ depth, pyproxies, create_pyproxies, dict_converter, default_converter }?: {
         /** How many layers deep to perform the conversion. Defaults to infinite */
         depth?: number;
         /**
@@ -90,7 +90,15 @@ declare class PyProxyClass {
          * converts it to an array of entries, and ``(it) => new Map(it)`` converts
          * it to a ``Map`` (which is the default behavior).
          */
-        dict_converter?: any;
+        dict_converter?: (array: Iterable<[
+            key: string,
+            value: any
+        ]>) => any;
+        /**
+         * Optional argument to convert objects with no default conversion. See the
+         * documentation of :any:`pyodide.to_js`.
+         */
+        default_converter?: (obj: PyProxy, convert: (obj: PyProxy) => any, cacheConversion: (obj: PyProxy, result: any) => void) => any;
     }): any;
     /**
      * Check whether the :any:`PyProxy.length` getter is available on this PyProxy. A

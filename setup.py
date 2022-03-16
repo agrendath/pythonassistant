@@ -1,4 +1,7 @@
+from cProfile import run
+from configparser import LegacyInterpolation
 from distutils.log import debug
+from doctest import debug_script
 import math
 from pickle import TRUE
 import sys
@@ -6,6 +9,7 @@ import io
 import traceback
 import ast
 import js
+import os
 from io import StringIO
 from pylint import lint
 from pylint.reporters.text import TextReporter
@@ -41,15 +45,21 @@ class WritableObject(object):
 def test_and_run(code: str) -> str:
     pylint_broke = False  # flag that tracks whether pylint broke or not
     run_out = run_code(code)
+    error_out = ""
 
     try:
         pylint_out = test_code(code)
-    except:  # defaults to python output if pylint throws an exception
+    except Exception as e:  # defaults to python output if pylint throws an exception
+        if DEBUG:
+            print(f"""
+PYLINT BROKE
+    Error message:
+            
+    {e}
+""")
         pylint_broke = True
         pylint_out = """
-[EN] Something went wrong with PyLint, please re-run your code.
-
-[NL] Er is iets fout gelopen met PyLint, probeer opnieuw.
+Er is iets fout gelopen met PyLint, probeer opnieuw.
 """
     # prints python output in console, useful for debugging
     # if DEBUG:
@@ -57,10 +67,9 @@ def test_and_run(code: str) -> str:
 
     # code was faulty and could not be run, replacing standard python error messages with pylint error messages
     if run_out.startswith("Traceback") and not pylint_broke:
+        error_out = run_out
         run_out = """
-[EN] Something went wrong that prevented your code from executing, you probably have an error somewhere in your code. Check PyLint output below for feedback.
-
-[NL] Er is iets fout gelopen waardoor je code niet uitgevoerd kon worden, waarschijnlijk heb je ergens een fout in je code. Check PyLint output hieronder voor feedback. 
+Er is iets fout gelopen waardoor je code niet uitgevoerd kon worden, waarschijnlijk heb je ergens een fout in je code. Check PyLint output hieronder voor feedback. 
 """
 
     out = f"""
@@ -69,6 +78,9 @@ PYTHON OUTPUT:
 ---------------------------------
 PYLINT OUTPUT:
     {pylint_out}
+---------------------------------
+PYTHON ERROR OUTPUT:
+    {error_out}
 """
 
     return out
@@ -88,7 +100,7 @@ def test_code(code):
     if DEBUG:
         print(result)  # prints full pylint output without filtering
 
-    pylint_out = filter_error_messages(result)
+    pylint_out = filter_error_messages(result, code.split('\n'))
 
     lint.pylinter.MANAGER.astroid_cache = {}
 
@@ -156,7 +168,7 @@ def get_unparse(node):
     return ast.unparse(node)
 
 
-def filter_error_messages(pylint_output: str) -> str:
+def filter_error_messages(pylint_output: str, code) -> str:
     out = ""
     # pattern that matches with pylint error messages, captures: (1) line, (2) column, (3) error code, and (4) message
     pattern = r".*:(\d*):(\d*): (\w+): (.*)"
@@ -172,94 +184,122 @@ def filter_error_messages(pylint_output: str) -> str:
             break
 
         match = re.search(pattern, line)
+        lineno = int(match.group(1))
+        colno = int(match.group(2))
         if match:
             error_code = match.group(3)
 
             if error_code[0] == "E":  # we are currently only interested in E error messages
                 out += f"""
-{counter}. [EN] Line {match.group(1)}, column {match.group(2)}: [{error_code}] {match.group(4)}
-
-{counter}. [NL] Lijn {match.group(1)}, kolom {match.group(2)}: [{error_code}] {translate(error_code, match.group(4))}
+{counter}. Lijn {lineno}, kolom {colno}: [{error_code}] {translate(error_code, match.group(4), code[lineno-1], colno)}
 """
                 counter += 1
 
     return out
 
 
-def translate(error_code: str, m: str) -> str:
+def translate(error_code: str, m: str, line: str, colno: int) -> str:
 
     msg = m.upper()
 
+    out = f"""
+{line}
+{(colno - 1) * " "}^
+
+"""
+
     if error_code == "E0001":
         if "Perhaps you forgot a comma?".upper() in msg:
-            return "Syntax fout: je bent waarschijnlijk ergens een komma vergeten."
+            out += "Syntax fout: je bent waarschijnlijk ergens een komma vergeten."
         elif "unterminated string literal".upper() in msg:
-            return "Syntax fout: onafgesloten string; strings moeten afgesloten worden met een \" of \'"
-        elif "expected \":\"".upper() in msg:
-            return "Syntax fout: \":\" verwacht; `if`/`else`/`elif`/`while`/`for`/`def`-statements moeten altijd gevolgd worden door een dubbelpunt (:)."
+            out += "Syntax fout: onafgesloten string; strings moeten afgesloten worden met een \" of \'"
+        elif "expected ':'".upper() in msg:
+            statement = get_statement(line)
+            out += f"Syntax fout: \":\" verwacht bij je `{statement}`-statement; `if`/`else`/`elif`/`while`/`for`/`def`-statements moeten altijd gevolgd worden door een dubbelpunt (:)."
         elif "invalid character".upper() in msg:
-            return "Syntax fout: je gebruikt hier een ongeldig teken."
+            p = r"invalid character '(.)' .*"
+            match = re.search(p, m)
+
+            if match:
+                out += f"Syntax fout: je gebruikt hier een ongeldig teken, namelijk '{match.group(1)}'."
+            else:
+                out += "Syntax fout: je gebruikt hier een ongeldig teken."
         elif "Maybe you meant \'==\'".upper() in msg:
-            return "Syntax fout: je hebt '=' gebruikt waar het niet mag, bedoelde je misschien '==' of ':='?"
+            out += "Syntax fout: je hebt '=' gebruikt waar het niet mag, bedoelde je misschien '==' of ':='?"
         elif "unexpected indent".upper() in msg:
-            return "Syntax fout: onverwachte inspringing (indent)."
+            out += "Syntax fout: onverwachte inspringing (indent)."
         elif "expected an indented block".upper() in msg:
-            return "Syntax fout: je bent hier een inspringing (indent) vergeten; code bijhorende bij `if`/`else`/`elif`/`while`/`for`/`def`-statements moeten altijd een inspringing hebben."
+            out += "Syntax fout: je bent hier een inspringing (indent) vergeten; code bijhorende bij `if`/`else`/`elif`/`while`/`for`/`def`-statements moeten altijd een inspringing hebben."
         elif "Missing parentheses".upper() in msg:
-            return "Syntax fout: je bent haakjes vergeten bij je functie-oproep."
+            out += "Syntax fout: je bent haakjes vergeten bij je functie-oproep."
         elif "'(' was never matched".upper() in msg:
-            return "Syntax fout: je hebt je haakje '(' nooit afgesloten."
+            out += "Syntax fout: je hebt je haakje '(' nooit afgesloten."
         elif "unmatched ')'".upper() in msg:
-            return "Syntax fout: je hebt je haakjes nooit geopend, je hebt een ')' te veel."
+            out += "Syntax fout: je hebt je haakjes nooit geopend, je hebt een ')' te veel."
         elif "invalid decimal literal".upper() in msg:
-            return "Syntax fout: ongeldig getal; je hebt non-decimalen gebruikt in je getal of je bent een variabele met een getal begonnen. Getallen kunnen enkel cijfers van 0 t.e.m. 9 bevatten en een underscore '_' om groepen te onderscheiden (dus een miljoen wordt 1_000_000), niets anders is toegelaten. Namen van variabelen kunnen ook nooit beginnen met getallen."
+            out += "Syntax fout: ongeldig getal; je hebt non-decimalen gebruikt in je getal of je bent een variabele met een getal begonnen. Getallen kunnen enkel cijfers van 0 t.e.m. 9 bevatten en een underscore '_' om groepen te onderscheiden (dus een miljoen wordt 1_000_000), niets anders is toegelaten. Namen van variabelen kunnen ook nooit beginnen met getallen."
         elif "unindent does not match any outer indentation level".upper() in msg:
-            return "Syntax fout: je indentatie komt niet overeen met de rest van je code; kijk nog eens goed na of je indentatie overal consistent is."
+            out += "Syntax fout: je indentatie komt niet overeen met de rest van je code; kijk nog eens goed na of je indentatie overal consistent is."
         elif "cannot assign to expression here".upper() in msg:
-            return "Syntax fout: je hebt een enkele gelijkheidsteken (toewijzing aan variabele) '=' gebruikt waar het niet mag; bedoelde je misschien '==' om twee waarden met elkaar te vergelijken?"
+            out += "Syntax fout: je hebt een enkele gelijkheidsteken (toewijzing aan variabele) '=' gebruikt waar het niet mag; bedoelde je misschien '==' om twee waarden met elkaar te vergelijken?"
         elif "leading zeros in decimal integer".upper() in msg:
-            return "Syntax fout: getallen kunnen niet beginnen met nullen."
+            out += "Syntax fout: getallen kunnen niet beginnen met nullen."
+        elif "EOL while scanning string literal".upper() in msg:
+            out += "Syntax fout: onafgesloten string; strings moeten afgesloten worden met een \" of \'"
         else:
-            return m
+            out += "Syntax fout: PyLint kon je fout niet vinden. De meest voorkomende fouten zijn: komma ',' vergeten tussen o.a. parameters, dubbelpunt ':' vergeten aan het einde van een statement, ongeldig karakter gebruikt, '=' gebruikt i.p.v. '=='; dus kijk deze zeker goed na."
 
     elif error_code == "E0602":  # undefined variable
         p = r"Undefined variable '(.*)' .*"
         match = re.search(p, m)
 
         if match:
-            return f"Ongedefinieerde variabele '{match.group(1)}'. Zorg dat je deze variabele eerst een waarde toekent vooraleer je ze gebruikt."
+            out += f"Ongedefinieerde variabele '{match.group(1)}'. Zorg dat je deze variabele eerst een waarde toekent vooraleer je ze gebruikt."
         else:
-            return m
+            out += m
 
     elif error_code == "E0401":  # import error
         p = r"Unable to import '(.*)' .*"
         match = re.search(p, m)
 
         if match:
-            return f"Ongeldige import; '{match.group(1)}' kon niet worden geïmporteerd, kijk na of je de naam juist hebt gespeld."
+            out += f"Ongeldige import; '{match.group(1)}' kon niet worden geïmporteerd, kijk na of je de naam juist hebt gespeld."
         else:
-            return m
+            out += m
 
     elif error_code == "E1120":  # no value for parameter
         p = r"No value for argument '(.*)' .*"
         match = re.search(p, m)
 
         if match:
-            return f"Geen waarde toegekend aan argument '{match.group(1)}' bij methode-oproep."
+            out += f"Geen waarde toegekend aan argument '{match.group(1)}' bij methode-oproep."
         else:
-            return m
+            out += m
 
     elif error_code == "E0601":  # using variable before assignment
         p = r"Using variable '(.*)' .*"
         match = re.search(p, m)
 
         if match:
-            return f"Variabele '{match.group(1)}' wordt gebruikt voor er een waarde aan toegekend wordt; zorg dat je eerst een waarde toekent aan de variabele vooraleer je deze gebruikt."
+            out += f"Variabele '{match.group(1)}' wordt gebruikt voor er een waarde aan toegekend wordt; zorg dat je eerst een waarde toekent aan de variabele vooraleer je deze gebruikt."
         else:
-            return m
+            out += m
 
     elif error_code == "E1121":  # too many function arguments
-        return "Je gebruikt te veel argumenten voor deze methode, kijk na of je de juiste methode gebruikt."
+        out += "Je gebruikt te veel argumenten voor deze methode, kijk na of je de juiste methode gebruikt."
 
     else:
-        return m
+        out += m
+
+    return out
+
+
+def get_statement(line: str) -> str:
+
+    p = r"(\w*) .*"
+    match = re.search(p, line.strip())
+
+    if match:
+        return match.group(1)
+
+    return ""
