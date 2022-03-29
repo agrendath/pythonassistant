@@ -20,7 +20,7 @@ async function init(){
     // await pyodide.loadPackage("platformdirs");
     // await pyodide.loadPackage("isort");
     // await pyodide.loadPackage("toml");
-    // await pyodide.loadPackage("typing_extensions");
+    await pyodide.loadPackage("typing_extensions");
     // await pyodide.loadPackage("pylint");
     // console.log("done")
     await pyodide.runPythonAsync(`
